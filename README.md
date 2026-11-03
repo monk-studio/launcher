@@ -37,4 +37,5 @@ Before ⌘Space works, turn off Spotlight's shortcut: **System Settings → Keyb
 Sources/main.swift   the whole app
 Info.plist           bundle metadata (LSUIElement: no Dock icon)
 build.sh             build, ad-hoc sign, optionally install
+release.sh           Developer ID sign, notarize, publish GitLab release
 ```
