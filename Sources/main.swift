@@ -64,6 +64,11 @@ enum AppIndex {
                 if u.pathExtension == "app" {
                     urls.append(u)
                     e.skipDescendants()
+                    // Helper apps embedded in bundles (e.g. Xcode's DeviceHub, Instruments).
+                    let nested = u.appendingPathComponent("Contents/Applications")
+                    if let inner = try? fm.contentsOfDirectory(at: nested, includingPropertiesForKeys: nil, options: .skipsHiddenFiles) {
+                        urls += inner.filter { $0.pathExtension == "app" }
+                    }
                 } else if e.level >= 2 {
                     e.skipDescendants()
                 }
