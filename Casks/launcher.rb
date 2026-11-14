@@ -1,6 +1,6 @@
 cask "launcher" do
-  version "1.0"
-  sha256 "10a085972c88ff363c6d4aa94fb2e744fd48335978e112e86246b121268dcb9e"
+  version "1.1"
+  sha256 "f261fb9e3b7d4df757fbb24c1b6c07d2b891c0aed630acf31ec56eb282dd8ae4"
 
   url "https://gitlab.com/wddwycc/launcher/-/releases/v#{version}/downloads/Launcher-#{version}.zip"
   name "Launcher"
