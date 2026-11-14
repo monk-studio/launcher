@@ -38,4 +38,12 @@ ditto -c -k --keepParent "$APP" "$ZIP"
 
 glab release create "$TAG" "$ZIP" --name "Launcher $VERSION" --ref "$(git rev-parse HEAD)" \
     --notes "Notarized build for macOS 13+. Unzip and move Launcher.app to /Applications."
+
+# Update the Homebrew cask (this repo doubles as the tap) and publish it
+SHA=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)
+sed -i '' -e "s/^  version \".*\"/  version \"$VERSION\"/" \
+    -e "s/^  sha256 \".*\"/  sha256 \"$SHA\"/" Casks/launcher.rb
+git add Casks/launcher.rb
+git commit -m "Update cask to $VERSION"
+git push
 echo "Released $TAG"
