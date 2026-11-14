@@ -250,7 +250,9 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSTableViewDataSo
         }
     }
 
-    func toggle() { panel.isVisible ? hide() : show() }
+    // isVisible can be true while the window server never actually showed the panel,
+    // so key status is the reliable "is it open" signal (we hide on resign key anyway).
+    func toggle() { panel.isKeyWindow ? hide() : show() }
 
     func show() {
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main!
@@ -258,7 +260,10 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSTableViewDataSo
         anchorTop = screenFrame.maxY - screenFrame.height * 0.2
         field.stringValue = ""
         refresh()
-        panel.makeKeyAndOrderFront(nil)
+        // makeKeyAndOrderFront only orders front "conditionally" while another app is
+        // active, which the window server sometimes refuses; force it.
+        panel.orderFrontRegardless()
+        panel.makeKey()
         panel.makeFirstResponder(field)
         reindex()
     }
