@@ -36,15 +36,18 @@ final class Item {
     let subtitle: String
     let keys: [String]
     let action: () -> Void
+    /// Bundle that can be moved to the Trash from the results list (nil for commands and system apps).
+    let trashURL: URL?
     private let makeIcon: () -> NSImage
     lazy var icon: NSImage = makeIcon()
 
-    init(title: String, subtitle: String, aliases: [String] = [], icon: @escaping () -> NSImage, action: @escaping () -> Void) {
+    init(title: String, subtitle: String, aliases: [String] = [], icon: @escaping () -> NSImage, trashURL: URL? = nil, action: @escaping () -> Void) {
         self.title = title
         self.subtitle = subtitle
         self.keys = Array(Set(([title] + aliases).flatMap(matchKeys)))
         self.makeIcon = icon
         self.action = action
+        self.trashURL = trashURL
     }
 }
 
@@ -80,6 +83,7 @@ enum AppIndex {
             let display = (fm.displayName(atPath: url.path) as NSString).deletingPathExtension
             return Item(title: display, subtitle: url.path, aliases: [file],
                         icon: { NSWorkspace.shared.icon(forFile: url.path) },
+                        trashURL: url.path.hasPrefix("/System/") ? nil : url,
                         action: { NSWorkspace.shared.openApplication(at: url, configuration: .init()) })
         }
     }
@@ -138,6 +142,21 @@ final class Panel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
+/// The table refuses first responder (the search field keeps focus), which stops it from
+/// forwarding clicks to buttons inside its cells, so route trash-button clicks by hand.
+final class ResultsTable: NSTableView {
+    override func mouseDown(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        let row = self.row(at: p)
+        if row >= 0, let cell = view(atColumn: 0, row: row, makeIfNecessary: false) as? Cell,
+           !cell.trash.isHidden, cell.trash.bounds.contains(cell.trash.convert(event.locationInWindow, from: nil)) {
+            cell.onTrash?()
+            return
+        }
+        super.mouseDown(with: event)
+    }
+}
+
 final class RowView: NSTableRowView {
     override var isEmphasized: Bool { get { true } set {} }
 }
@@ -146,6 +165,8 @@ final class Cell: NSTableCellView {
     let icon = NSImageView()
     let title = NSTextField(labelWithString: "")
     let sub = NSTextField(labelWithString: "")
+    let trash = NSButton()
+    var onTrash: (() -> Void)?
 
     init() {
         super.init(frame: .zero)
@@ -156,7 +177,15 @@ final class Cell: NSTableCellView {
         sub.lineBreakMode = .byTruncatingMiddle
         icon.imageScaling = .scaleProportionallyUpOrDown
         icon.contentTintColor = .labelColor
-        for v in [icon, title, sub] as [NSView] {
+        trash.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "Move to Trash")
+        trash.isBordered = false
+        trash.bezelStyle = .regularSquare
+        trash.contentTintColor = .labelColor
+        trash.toolTip = "Move to Trash"
+        trash.target = self
+        trash.action = #selector(trashClicked)
+        trash.isHidden = true
+        for v in [icon, title, sub, trash] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
@@ -166,13 +195,19 @@ final class Cell: NSTableCellView {
             icon.widthAnchor.constraint(equalToConstant: 30),
             icon.heightAnchor.constraint(equalToConstant: 30),
             title.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 10),
-            title.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
+            title.trailingAnchor.constraint(lessThanOrEqualTo: trash.leadingAnchor, constant: -8),
             title.topAnchor.constraint(equalTo: topAnchor, constant: 5),
             sub.leadingAnchor.constraint(equalTo: title.leadingAnchor),
-            sub.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
+            sub.trailingAnchor.constraint(lessThanOrEqualTo: trash.leadingAnchor, constant: -8),
             sub.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 1),
+            trash.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            trash.centerYAnchor.constraint(equalTo: centerYAnchor),
+            trash.widthAnchor.constraint(equalToConstant: 28),
+            trash.heightAnchor.constraint(equalToConstant: 28),
         ])
     }
+
+    @objc private func trashClicked() { onTrash?() }
 
     required init?(coder: NSCoder) { fatalError() }
 }
@@ -182,13 +217,14 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSTableViewDataSo
 
     private let panel = Panel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     private let field = NSTextField()
-    private let table = NSTableView()
+    private let table = ResultsTable()
     private let scroll = NSScrollView()
     private let commands: () -> [Item]
     private var apps: [Item] = []
     private var results: [Item] = []
     private var anchorTop: CGFloat = 0
     private var screenFrame = NSRect.zero
+    private var confirming = false
 
     init(commands: @escaping () -> [Item]) {
         self.commands = commands
@@ -314,6 +350,50 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSTableViewDataSo
         item.action()
     }
 
+    private func trash(_ item: Item) {
+        guard let url = item.trashURL else { return }
+        let alert = NSAlert()
+        alert.messageText = "Move “\(item.title)” to the Trash?"
+        alert.informativeText = url.path
+        alert.icon = item.icon
+        alert.addButton(withTitle: "Move to Trash")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons[0].hasDestructiveAction = true
+        // The alert takes key status from the panel; don't treat that as "dismissed".
+        confirming = true
+        NSApp.activate(ignoringOtherApps: true)
+        let ok = alert.runModal() == .alertFirstButtonReturn
+        confirming = false
+        panel.makeKey()
+        panel.makeFirstResponder(field)
+        guard ok else { return }
+        NSLog("Launcher: moving \(url.path) to Trash")
+        NSWorkspace.shared.recycle([url]) { [weak self] _, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let error {
+                    NSLog("Launcher: could not move \(url.path) to Trash: \(error)")
+                    NSSound.beep()
+                    return
+                }
+                let row = self.table.selectedRow
+                self.apps.removeAll { $0 === item }
+                self.results.removeAll { $0 === item }
+                self.table.reloadData()
+                if !self.results.isEmpty { self.select(min(row, self.results.count - 1)) }
+                self.layout()
+            }
+        }
+    }
+
+    private func updateTrashButtons() {
+        let selected = table.selectedRow
+        table.enumerateAvailableRowViews { rowView, row in
+            guard let cell = rowView.view(atColumn: 0) as? Cell, results.indices.contains(row) else { return }
+            cell.trash.isHidden = row != selected || results[row].trashURL == nil
+        }
+    }
+
     // MARK: Text field
 
     func controlTextDidChange(_ obj: Notification) { refresh() }
@@ -346,12 +426,16 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSTableViewDataSo
         cell.icon.image = item.icon
         cell.title.stringValue = item.title
         cell.sub.stringValue = item.subtitle
+        cell.trash.isHidden = row != tableView.selectedRow || item.trashURL == nil
+        cell.onTrash = { [weak self] in self?.trash(item) }
         return cell
     }
 
+    func tableViewSelectionDidChange(_ notification: Notification) { updateTrashButtons() }
+
     // MARK: Window
 
-    func windowDidResignKey(_ notification: Notification) { hide() }
+    func windowDidResignKey(_ notification: Notification) { if !confirming { hide() } }
 }
 
 // MARK: - App

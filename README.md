@@ -6,6 +6,7 @@ A small, native Spotlight replacement for macOS. One Swift file, no dependencies
 
 - **⌘Space** to open or close the launcher
 - **App search** across `/Applications`, `/System/Applications`, `~/Applications` and Finder, matching English names, localized names, pinyin and initials (e.g. `wx` → 微信, `vsc` → Visual Studio Code)
+- **Move to Trash**: the highlighted app shows a trash button; click it to move the app to the Trash (not shown for system apps)
 - **Keep Awake**: toggles `caffeinate -dims` (type `awake`). caffeinate exits when Launcher exits.
 - **Launch at Login** toggle
 - **Menu bar icon**: magnifying glass normally, coffee cup while Keep Awake is on
