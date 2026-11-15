@@ -16,6 +16,8 @@
 	<string>2</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Launcher asks Finder to move apps that need an administrator password to the Trash.</string>
 	<key>LSUIElement</key>
 	<true/>
 </dict>

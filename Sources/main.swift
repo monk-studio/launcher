@@ -372,18 +372,30 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSTableViewDataSo
             DispatchQueue.main.async {
                 guard let self else { return }
                 if let error {
-                    NSLog("Launcher: could not move \(url.path) to Trash: \(error)")
-                    NSSound.beep()
-                    return
+                    // Root-owned bundles (App Store apps) need admin rights; Finder asks for the password.
+                    NSLog("Launcher: recycle failed (\(error)), asking Finder")
+                    guard self.trashViaFinder(url) else { NSSound.beep(); return }
                 }
-                let row = self.table.selectedRow
-                self.apps.removeAll { $0 === item }
-                self.results.removeAll { $0 === item }
-                self.table.reloadData()
-                if !self.results.isEmpty { self.select(min(row, self.results.count - 1)) }
-                self.layout()
+                self.removeFromResults(item)
             }
         }
+    }
+
+    private func trashViaFinder(_ url: URL) -> Bool {
+        let path = url.path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        var error: NSDictionary?
+        NSAppleScript(source: "tell application \"Finder\" to delete (POSIX file \"\(path)\" as alias)")?.executeAndReturnError(&error)
+        if let error { NSLog("Launcher: Finder could not move \(url.path) to Trash: \(error)") }
+        return error == nil
+    }
+
+    private func removeFromResults(_ item: Item) {
+        let row = table.selectedRow
+        apps.removeAll { $0 === item }
+        results.removeAll { $0 === item }
+        table.reloadData()
+        if !results.isEmpty { select(min(row, results.count - 1)) }
+        layout()
     }
 
     private func updateTrashButtons() {

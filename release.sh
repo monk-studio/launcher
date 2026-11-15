@@ -17,7 +17,7 @@ TAG="v$VERSION"
 ZIP="build/Launcher-$VERSION.zip"
 
 ./build.sh
-codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP"
+codesign --force --options runtime --timestamp --entitlements Launcher.entitlements --sign "$IDENTITY" "$APP"
 codesign --verify --strict --verbose=2 "$APP"
 
 ditto -c -k --keepParent "$APP" "$ZIP"
