@@ -26,7 +26,6 @@ With Homebrew (macOS 13+):
 
 ```sh
 brew tap monk-studio/tap
-brew trust monk-studio/tap
 brew install --cask monk-studio/tap/launcher
 ```
 
