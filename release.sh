@@ -1,7 +1,9 @@
 #!/bin/sh
 # Usage: ./release.sh
 #   Build, sign with Developer ID (hardened runtime), notarize, staple,
-#   then publish build/Launcher-<version>.zip as GitLab release v<version>.
+#   then publish build/Launcher-<version>.zip as GitHub release v<version> and
+#   update the cask in the Homebrew tap (monk-studio/homebrew-tap, checked out
+#   next to this repo, or at $TAP).
 #   Notarizes with the App Store Connect API key set up by `asc login` (~/.asc).
 set -e
 cd "$(dirname "$0")"
@@ -15,6 +17,14 @@ APP=build/Launcher.app
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Info.plist)
 TAG="v$VERSION"
 ZIP="build/Launcher-$VERSION.zip"
+TAP="${TAP:-../homebrew-tap}"
+
+if [ ! -f "$TAP/Casks/launcher.rb" ]; then
+    echo "No tap at $TAP: git clone git@github.com:monk-studio/homebrew-tap.git $TAP" >&2
+    exit 1
+fi
+git -C "$TAP" pull -q --ff-only
+git push
 
 ./build.sh
 codesign --force --options runtime --timestamp --entitlements Launcher.entitlements --sign "$IDENTITY" "$APP"
@@ -36,14 +46,13 @@ spctl --assess --type execute --verbose "$APP"
 rm -f "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
 
-glab release create "$TAG" "$ZIP" --name "Launcher $VERSION" --ref "$(git rev-parse HEAD)" \
+gh release create "$TAG" "$ZIP" --target "$(git rev-parse HEAD)" --title "Launcher $VERSION" \
     --notes "Notarized build for macOS 13+. Unzip and move Launcher.app to /Applications."
 
-# Update the Homebrew cask (this repo doubles as the tap) and publish it
+# Update the cask in the tap and publish it
 SHA=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)
 sed -i '' -e "s/^  version \".*\"/  version \"$VERSION\"/" \
-    -e "s/^  sha256 \".*\"/  sha256 \"$SHA\"/" Casks/launcher.rb
-git add Casks/launcher.rb
-git commit -m "Update cask to $VERSION"
-git push
+    -e "s/^  sha256 \".*\"/  sha256 \"$SHA\"/" "$TAP/Casks/launcher.rb"
+git -C "$TAP" commit -q -m "Update launcher to $VERSION" Casks/launcher.rb
+git -C "$TAP" push -q
 echo "Released $TAG"

@@ -25,8 +25,9 @@ A small, native Spotlight replacement for macOS. One Swift file, no dependencies
 With Homebrew (macOS 13+):
 
 ```sh
-brew tap wddwycc/launcher https://gitlab.com/wddwycc/launcher
-brew install --cask wddwycc/launcher/launcher
+brew tap monk-studio/tap
+brew trust monk-studio/tap
+brew install --cask monk-studio/tap/launcher
 ```
 
 ### From source
@@ -47,6 +48,5 @@ Before ⌘Space works, turn off Spotlight's shortcut: **System Settings → Keyb
 Sources/main.swift   the whole app
 Info.plist           bundle metadata (LSUIElement: no Dock icon)
 build.sh             build, ad-hoc sign, optionally install
-release.sh           Developer ID sign, notarize, publish GitLab release, bump cask
-Casks/launcher.rb    Homebrew cask (this repo is also the tap)
+release.sh           Developer ID sign, notarize, publish GitHub release, bump the cask in monk-studio/homebrew-tap
 ```
